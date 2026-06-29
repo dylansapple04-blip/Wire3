@@ -1,0 +1,12 @@
+# Netlify configuration — tells Netlify where the site and functions live.
+# Without this, functions sometimes aren't detected on first deploy.
+
+[build]
+  publish = "."
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[build.environment]
+  NODE_VERSION = "20"

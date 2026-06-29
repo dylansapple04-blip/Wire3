@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>Wire 3 — Marion Strike Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#000; --panel:#0a0a0a; --line:#1c1c1c;
+    --prime:#00ff87; --strong:#00e5ff; --contested:#ffb300; --neg:#ff2d78;
+    --ink:#f2f2f2; --dim:#8a8a8a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:"DM Sans",system-ui,sans-serif;overflow:hidden}
+  #map{position:absolute;inset:0;background:#000}
+  .hdr{position:absolute;top:0;left:0;right:0;z-index:1000;
+    padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;
+    background:linear-gradient(180deg,rgba(0,0,0,.92) 60%,rgba(0,0,0,0));pointer-events:none}
+  .hdr h1{margin:0;font-family:"Syne",sans-serif;font-weight:800;font-size:19px;letter-spacing:-.01em;line-height:1}
+  .hdr h1 b{color:var(--prime)}
+  .sub{margin-top:3px;font-family:"Space Mono",monospace;font-size:11px;color:var(--dim)}
+  .stats{display:flex;gap:14px;margin-top:10px;pointer-events:auto}
+  .stat .n{font-family:"Space Mono",monospace;font-weight:700;font-size:20px;line-height:1}
+  .stat .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin-top:2px}
+  .stat.g .n{color:var(--prime)} .stat.c .n{color:var(--strong)}
+  .basemap{position:absolute;top:calc(env(safe-area-inset-top) + 14px);right:14px;z-index:1100;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    font-family:"Space Mono",monospace;font-size:11px;font-weight:700;color:var(--ink);
+    padding:8px 12px;letter-spacing:.04em;cursor:pointer}
+  .legend{position:absolute;left:12px;bottom:calc(env(safe-area-inset-bottom) + 12px);z-index:1000;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 13px}
+  .legend .lt{font-family:"Space Mono",monospace;font-size:9px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--dim);margin-bottom:8px}
+  .lrow{display:flex;align-items:center;gap:8px;font-size:12px;margin:5px 0;cursor:pointer;opacity:1;transition:opacity .15s}
+  .lrow.off{opacity:.32}
+  .sw{width:13px;height:13px;border-radius:3px;flex:0 0 auto}
+  .filt{position:absolute;right:12px;bottom:calc(env(safe-area-inset-bottom) + 12px);z-index:1000;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    font-family:"Space Mono",monospace;font-size:10px;color:var(--dim);padding:9px 11px;max-width:150px;line-height:1.5}
+  .leaflet-popup-content-wrapper{background:#0b0b0b;color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+  .leaflet-popup-tip{background:#0b0b0b;border:1px solid var(--line)}
+  .leaflet-popup-content{margin:12px 14px;font-family:"DM Sans",sans-serif}
+  .pop h3{margin:0 0 2px;font-family:"Syne",sans-serif;font-size:15px;letter-spacing:-.01em}
+  .pop .hid{font-family:"Space Mono",monospace;font-size:9px;color:var(--dim);margin:0 0 8px}
+  .pop .tag{display:inline-block;font-family:"Space Mono",monospace;font-size:9px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.08em;padding:2px 7px;border-radius:20px;margin-bottom:9px}
+  .pop table{width:100%;border-collapse:collapse;font-size:13px}
+  .pop td{padding:3px 0} .pop td:last-child{text-align:right;font-family:"Space Mono",monospace;font-weight:700}
+  .pop .big{font-size:17px;color:var(--prime)}
+  .doorbtn{margin-top:10px;width:100%;background:transparent;border:1px solid;border-radius:9px;
+    font-family:"Space Mono",monospace;font-size:12px;font-weight:700;padding:9px;letter-spacing:.04em;cursor:pointer}
+  .doorbtn:active{opacity:.6}
+  .doorsmsg{margin-top:10px;font-family:"Space Mono",monospace;font-size:11px;font-weight:700;text-align:center}
+  .dpop{font-family:"DM Sans",sans-serif}
+  .dpop .a{font-family:"Syne",sans-serif;font-weight:600;font-size:13px}
+  .dpop .o{font-family:"Space Mono",monospace;font-size:10px;color:var(--dim);margin-top:2px}
+  .lbl{background:none;border:none;box-shadow:none;color:#fff;font-family:"Space Mono",monospace;
+    font-size:10px;font-weight:700;text-shadow:0 1px 3px #000,0 0 6px #000;padding:0!important}
+  .lbl::before{display:none}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <h1>WIRE&nbsp;3 <b>STRIKE MAP</b></h1>
+  <div class="sub">Marion County · newly lit Jun &rarr; Dec 2025 · FCC BDC</div>
+  <div class="stats">
+    <div class="stat g"><div class="n" id="s-newly">0</div><div class="l">New homes</div></div>
+    <div class="stat g"><div class="n" id="s-mono">0</div><div class="l">Fiber monopoly</div></div>
+    <div class="stat c"><div class="n" id="s-hex">0</div><div class="l">Target hexes</div></div>
+  </div>
+</div>
+<button class="basemap" id="bm">◐ DARK</button>
+<div id="map"></div>
+<div class="legend">
+  <div class="lt">Tap to filter</div>
+  <div class="lrow" data-tier="prime"><span class="sw" style="background:#00ff87"></span>Prime · only fiber</div>
+  <div class="lrow" data-tier="strong"><span class="sw" style="background:#00e5ff"></span>Strong · ≤1 rival</div>
+  <div class="lrow" data-tier="contested"><span class="sw" style="background:#ffb300"></span>Contested · 2 rivals</div>
+</div>
+<div class="filt">Tap a hex for its area name + counts. Validate live on the Wire&nbsp;3 portal before walking.</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js"></script>
+<script>
+const TOKEN = "pk.eyJ1IjoiZHlsYW5zYXBwbGUwNCIsImEiOiJjbXF5a3lrN3kyNDFpMnVxMnlpYTZrbWdrIn0.ZbG2GlWhH9-wCwlJ8zubWQ";
+const DATA = {"summary": {"newly_total": 6813, "mono_total": 2052, "hex_count": 76, "prime": 33, "strong": 28, "contested": 15}, "hexes": [{"hex": "8844f40351fffff", "newly": 267, "mono": 260, "rivals": 0.0, "w3": 267, "tier": "prime"}, {"hex": "8844f41ab7fffff", "newly": 232, "mono": 231, "rivals": 0.0, "w3": 232, "tier": "prime"}, {"hex": "8844f40355fffff", "newly": 241, "mono": 221, "rivals": 0.1, "w3": 241, "tier": "prime"}, {"hex": "8844f40357fffff", "newly": 273, "mono": 131, "rivals": 0.5, "w3": 273, "tier": "strong"}, {"hex": "8844f40343fffff", "newly": 151, "mono": 149, "rivals": 0.0, "w3": 154, "tier": "prime"}, {"hex": "8844f41ab5fffff", "newly": 160, "mono": 147, "rivals": 0.1, "w3": 160, "tier": "prime"}, {"hex": "8844f41a85fffff", "newly": 276, "mono": 91, "rivals": 0.7, "w3": 276, "tier": "strong"}, {"hex": "8844f40319fffff", "newly": 182, "mono": 79, "rivals": 0.6, "w3": 182, "tier": "strong"}, {"hex": "8844f4030bfffff", "newly": 176, "mono": 63, "rivals": 0.7, "w3": 205, "tier": "strong"}, {"hex": "8844f418ebfffff", "newly": 354, "mono": 2, "rivals": 1.0, "w3": 354, "tier": "strong"}, {"hex": "8844f41a8dfffff", "newly": 153, "mono": 55, "rivals": 0.6, "w3": 153, "tier": "strong"}, {"hex": "8844f418c7fffff", "newly": 320, "mono": 5, "rivals": 1.0, "w3": 320, "tier": "strong"}, {"hex": "8844f41ab1fffff", "newly": 71, "mono": 66, "rivals": 0.1, "w3": 71, "tier": "prime"}, {"hex": "8844f40311fffff", "newly": 244, "mono": 16, "rivals": 0.9, "w3": 265, "tier": "strong"}, {"hex": "8844f4031dfffff", "newly": 261, "mono": 10, "rivals": 1.0, "w3": 261, "tier": "strong"}, {"hex": "8844f418c5fffff", "newly": 281, "mono": 3, "rivals": 1.0, "w3": 281, "tier": "strong"}, {"hex": "8844f41abdfffff", "newly": 63, "mono": 54, "rivals": 0.1, "w3": 63, "tier": "prime"}, {"hex": "8844f418cbfffff", "newly": 238, "mono": 30, "rivals": 1.6, "w3": 238, "tier": "contested"}, {"hex": "8844f41a81fffff", "newly": 55, "mono": 54, "rivals": 0.0, "w3": 55, "tier": "prime"}, {"hex": "8844f418c1fffff", "newly": 228, "mono": 6, "rivals": 1.1, "w3": 228, "tier": "contested"}, {"hex": "8844f40353fffff", "newly": 53, "mono": 43, "rivals": 0.2, "w3": 53, "tier": "prime"}, {"hex": "8844f41a87fffff", "newly": 107, "mono": 30, "rivals": 0.7, "w3": 107, "tier": "strong"}, {"hex": "8844f418ddfffff", "newly": 149, "mono": 30, "rivals": 1.4, "w3": 149, "tier": "contested"}, {"hex": "8844f4035dfffff", "newly": 38, "mono": 38, "rivals": 0.0, "w3": 38, "tier": "prime"}, {"hex": "8844f40315fffff", "newly": 175, "mono": 1, "rivals": 1.0, "w3": 293, "tier": "strong"}, {"hex": "8844f418c3fffff", "newly": 205, "mono": 1, "rivals": 1.5, "w3": 205, "tier": "contested"}, {"hex": "8844f41899fffff", "newly": 208, "mono": 1, "rivals": 1.8, "w3": 208, "tier": "contested"}, {"hex": "8844f418c9fffff", "newly": 136, "mono": 5, "rivals": 1.0, "w3": 136, "tier": "strong"}, {"hex": "8844f4189dfffff", "newly": 193, "mono": 0, "rivals": 1.8, "w3": 193, "tier": "contested"}, {"hex": "8844f41ab9fffff", "newly": 31, "mono": 26, "rivals": 0.2, "w3": 31, "tier": "prime"}, {"hex": "8844f418d7fffff", "newly": 138, "mono": 0, "rivals": 1.1, "w3": 138, "tier": "contested"}, {"hex": "8844f4033dfffff", "newly": 26, "mono": 26, "rivals": 0.0, "w3": 154, "tier": "prime"}, {"hex": "8844f418cdfffff", "newly": 123, "mono": 1, "rivals": 1.0, "w3": 123, "tier": "strong"}, {"hex": "8844f41ac7fffff", "newly": 78, "mono": 13, "rivals": 0.8, "w3": 78, "tier": "strong"}, {"hex": "8844f41aa3fffff", "newly": 35, "mono": 21, "rivals": 0.4, "w3": 35, "tier": "prime"}, {"hex": "8844f41aabfffff", "newly": 21, "mono": 20, "rivals": 0.0, "w3": 21, "tier": "prime"}, {"hex": "8844f41895fffff", "newly": 144, "mono": 0, "rivals": 1.9, "w3": 144, "tier": "contested"}, {"hex": "8844f41889fffff", "newly": 89, "mono": 1, "rivals": 1.0, "w3": 89, "tier": "strong"}, {"hex": "8844f40309fffff", "newly": 18, "mono": 17, "rivals": 0.1, "w3": 209, "tier": "prime"}, {"hex": "8844f418d3fffff", "newly": 83, "mono": 0, "rivals": 1.0, "w3": 182, "tier": "strong"}, {"hex": "8844f41891fffff", "newly": 120, "mono": 0, "rivals": 1.9, "w3": 290, "tier": "contested"}, {"hex": "8844f40323fffff", "newly": 14, "mono": 13, "rivals": 0.1, "w3": 197, "tier": "prime"}, {"hex": "8844f418e3fffff", "newly": 61, "mono": 1, "rivals": 1.0, "w3": 61, "tier": "strong"}, {"hex": "8844f41883fffff", "newly": 32, "mono": 9, "rivals": 1.1, "w3": 32, "tier": "contested"}, {"hex": "8844f40305fffff", "newly": 10, "mono": 10, "rivals": 0.0, "w3": 118, "tier": "prime"}, {"hex": "8844f41a89fffff", "newly": 21, "mono": 8, "rivals": 0.6, "w3": 21, "tier": "strong"}, {"hex": "8844f418d5fffff", "newly": 46, "mono": 0, "rivals": 1.0, "w3": 46, "tier": "contested"}, {"hex": "8844f41aa7fffff", "newly": 16, "mono": 7, "rivals": 0.6, "w3": 16, "tier": "strong"}, {"hex": "8844f4188dfffff", "newly": 41, "mono": 0, "rivals": 1.0, "w3": 41, "tier": "strong"}, {"hex": "8844f41aa5fffff", "newly": 8, "mono": 8, "rivals": 0.0, "w3": 8, "tier": "prime"}, {"hex": "8844f40303fffff", "newly": 21, "mono": 4, "rivals": 1.1, "w3": 208, "tier": "contested"}, {"hex": "8844f40335fffff", "newly": 8, "mono": 6, "rivals": 0.2, "w3": 48, "tier": "prime"}, {"hex": "8844f418e1fffff", "newly": 26, "mono": 1, "rivals": 1.0, "w3": 26, "tier": "strong"}, {"hex": "8844f41aa1fffff", "newly": 5, "mono": 5, "rivals": 0.0, "w3": 5, "tier": "prime"}, {"hex": "8844f41ab3fffff", "newly": 5, "mono": 5, "rivals": 0.0, "w3": 5, "tier": "prime"}, {"hex": "8844f41ac1fffff", "newly": 5, "mono": 5, "rivals": 0.0, "w3": 5, "tier": "prime"}, {"hex": "8844f41ae3fffff", "newly": 22, "mono": 0, "rivals": 1.0, "w3": 22, "tier": "strong"}, {"hex": "8844f4032bfffff", "newly": 5, "mono": 3, "rivals": 0.4, "w3": 145, "tier": "prime"}, {"hex": "8844f4189bfffff", "newly": 24, "mono": 0, "rivals": 2.0, "w3": 250, "tier": "contested"}, {"hex": "8844f40145fffff", "newly": 3, "mono": 3, "rivals": 0.0, "w3": 3, "tier": "prime"}, {"hex": "8844f4014dfffff", "newly": 3, "mono": 3, "rivals": 0.0, "w3": 56, "tier": "prime"}, {"hex": "8844f4036bfffff", "newly": 3, "mono": 3, "rivals": 0.0, "w3": 3, "tier": "prime"}, {"hex": "8844f40301fffff", "newly": 2, "mono": 2, "rivals": 0.0, "w3": 192, "tier": "prime"}, {"hex": "8844f40321fffff", "newly": 2, "mono": 2, "rivals": 0.0, "w3": 144, "tier": "prime"}, {"hex": "8844f4188bfffff", "newly": 4, "mono": 1, "rivals": 0.8, "w3": 4, "tier": "strong"}, {"hex": "8844f41aa9fffff", "newly": 6, "mono": 0, "rivals": 1.0, "w3": 6, "tier": "strong"}, {"hex": "8844f40325fffff", "newly": 8, "mono": 0, "rivals": 1.8, "w3": 150, "tier": "contested"}, {"hex": "8844f41893fffff", "newly": 2, "mono": 1, "rivals": 1.0, "w3": 304, "tier": "strong"}, {"hex": "8844f40307fffff", "newly": 1, "mono": 1, "rivals": 0.0, "w3": 201, "tier": "prime"}, {"hex": "8844f4030dfffff", "newly": 1, "mono": 1, "rivals": 0.0, "w3": 187, "tier": "prime"}, {"hex": "8844f40329fffff", "newly": 1, "mono": 1, "rivals": 0.0, "w3": 398, "tier": "prime"}, {"hex": "8844f40363fffff", "newly": 1, "mono": 1, "rivals": 0.0, "w3": 133, "tier": "prime"}, {"hex": "8844f41ac3fffff", "newly": 1, "mono": 1, "rivals": 0.0, "w3": 1, "tier": "prime"}, {"hex": "8844f40149fffff", "newly": 5, "mono": 0, "rivals": 1.2, "w3": 79, "tier": "contested"}, {"hex": "8844f418d9fffff", "newly": 3, "mono": 0, "rivals": 1.0, "w3": 3, "tier": "strong"}, {"hex": "8844f40169fffff", "newly": 1, "mono": 0, "rivals": 1.0, "w3": 95, "tier": "strong"}]};
+const COLORS = {prime:"#00ff87", strong:"#00e5ff", contested:"#ffb300"};
+const TIERLABEL = {prime:"Prime — only fiber", strong:"Strong — ≤1 rival", contested:"Contested — 2 rivals"};
+
+const map = L.map("map",{zoomControl:false,attributionControl:false}).setView([29.187,-82.14],11);
+
+// --- basemaps ---
+const sat = L.tileLayer(
+  "https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/512/{z}/{x}/{y}@2x?access_token="+TOKEN,
+  {maxZoom:19, tileSize:512, zoomOffset:-1});
+const dark = L.layerGroup([
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",{maxZoom:19}),
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png",{maxZoom:19,opacity:.55})
+]);
+sat.addTo(map);
+
+const maxNew = Math.max(...DATA.hexes.map(h=>h.newly));
+const op = n => 0.18 + 0.5*(n/maxNew);
+const layers = {prime:[],strong:[],contested:[]};
+const active = {prime:true,strong:true,contested:true};
+const bounds = [];
+const polyByHex = {};
+
+function popHTML(h){
+  const col = COLORS[h.tier];
+  const area = h.area ? h.area : "Locating…";
+  let btn = "";
+  if(h.tier==="prime" || h.tier==="strong"){
+    const loaded = pinCache[h.hex];
+    btn = loaded
+      ? '<div class="doorsmsg" style="color:'+col+'">'+loaded.length+' doors loaded</div>'
+      : '<button class="doorbtn" style="border-color:'+col+';color:'+col+'" onclick="loadDoors(\''+h.hex+'\',this)">Load doors</button>';
+  }
+  return '<div class="pop"><h3>'+area+'</h3><p class="hid">'+h.hex+'</p>'+
+    '<span class="tag" style="background:'+col+'22;color:'+col+';border:1px solid '+col+'55">'+TIERLABEL[h.tier]+'</span>'+
+    '<table>'+
+    '<tr><td>New homes</td><td class="big">'+h.newly+'</td></tr>'+
+    '<tr><td>Fiber-monopoly</td><td style="color:'+COLORS.prime+'">'+h.mono+'</td></tr>'+
+    '<tr><td>Avg fiber rivals</td><td>'+h.rivals+'</td></tr>'+
+    '<tr><td>Wire 3 total</td><td>'+h.w3+'</td></tr>'+
+    '</table>'+btn+'</div>';
+}
+
+DATA.hexes.forEach(h=>{
+  const ring = h3.cellToBoundary(h.hex);
+  ring.forEach(p=>bounds.push(p));
+  const col = COLORS[h.tier];
+  const poly = L.polygon(ring,{color:col,weight:1.2,opacity:.9,fillColor:col,fillOpacity:op(h.newly)});
+  poly.bindPopup(popHTML(h));
+  poly.addTo(map);
+  layers[h.tier].push(poly);
+  polyByHex[h.hex]=poly;
+});
+map.fitBounds(bounds,{padding:[40,40]});
+
+document.getElementById("s-newly").textContent = DATA.summary.newly_total.toLocaleString();
+document.getElementById("s-mono").textContent  = DATA.summary.mono_total.toLocaleString();
+document.getElementById("s-hex").textContent   = DATA.summary.hex_count;
+
+document.querySelectorAll(".lrow").forEach(row=>{
+  row.addEventListener("click",()=>{
+    const t=row.dataset.tier; active[t]=!active[t];
+    row.classList.toggle("off",!active[t]);
+    layers[t].forEach(p=> active[t]? p.addTo(map): map.removeLayer(p));
+  });
+});
+
+let onSat=true;
+document.getElementById("bm").addEventListener("click",()=>{
+  onSat=!onSat;
+  if(onSat){map.removeLayer(dark);sat.addTo(map);document.getElementById("bm").textContent="◐ DARK";}
+  else{map.removeLayer(sat);dark.addTo(map);document.getElementById("bm").textContent="◑ SAT";}
+});
+
+// --- reverse-geocode each hex centroid -> neighborhood name (throttled) ---
+async function labelHexes(){
+  for(const h of DATA.hexes){
+    const [lat,lng] = h3.cellToLatLng(h.hex);
+    try{
+      const url = "https://api.mapbox.com/geocoding/v5/mapbox.places/"+lng+","+lat+
+        ".json?types=neighborhood,locality,place&limit=1&access_token="+TOKEN;
+      const r = await fetch(url); const j = await r.json();
+      h.area = (j.features && j.features[0]) ? j.features[0].text : "Marion County";
+    }catch(e){ h.area = "Marion County"; }
+    const poly = polyByHex[h.hex];
+    poly.setPopupContent(popHTML(h));
+    if(h.tier==="prime"){
+      poly.bindTooltip(h.area,{permanent:true,direction:"center",className:"lbl"});
+    }
+    await new Promise(res=>setTimeout(res,120)); // stay well under rate limits
+  }
+}
+labelHexes();
+
+// --- Regrid door pins (load on tap, via Netlify function) ---
+const ENDPOINT = "/.netlify/functions/parcels";
+const pinCache = {};                 // hex -> array of pins (session cache)
+const pinLayer = L.layerGroup().addTo(map);
+
+window.loadDoors = async function(hex, btn){
+  if(pinCache[hex]) return;
+  if(btn){ btn.textContent="Loading…"; btn.disabled=true; }
+  const tier = (DATA.hexes.find(x=>x.hex===hex)||{}).tier || "strong";
+  const col = COLORS[tier];
+  const ring = h3.cellToBoundary(hex, true);   // GeoJSON [lng,lat] order
+  const geometry = { type:"Polygon", coordinates:[ ring.concat([ring[0]]) ] };
+  try{
+    const r = await fetch(ENDPOINT,{
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ geojson: geometry, limit: 1000 })
+    });
+    const j = await r.json();
+    if(!r.ok){ throw new Error(j.error || ("HTTP "+r.status)); }
+    const pins = j.pins || [];
+    pinCache[hex] = pins;
+    pins.forEach(p=>{
+      L.circleMarker([p.lat,p.lng],{
+        radius:4, color:col, weight:1, fillColor:col, fillOpacity:.85
+      }).bindPopup('<div class="dpop"><div class="a">'+p.address+'</div>'+
+        (p.owner?'<div class="o">'+p.owner+'</div>':'')+
+        (p.use?'<div class="o">'+p.use+'</div>':'')+'</div>').addTo(pinLayer);
+    });
+    if(btn){
+      btn.outerHTML = '<div class="doorsmsg" style="color:'+col+'">'+pins.length+' doors loaded</div>';
+    }
+  }catch(e){
+    if(btn){ btn.textContent="Failed — retry"; btn.disabled=false; }
+    console.error("loadDoors", e);
+  }
+};
+
+</script>
+</body>
+</html>
